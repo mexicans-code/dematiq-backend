@@ -1,0 +1,21 @@
+{
+  "name": "dematiq-backend",
+  "version": "1.0.0",
+  "description": "Dematiq - Backend con microservicios",
+  "scripts": {
+    "gateway": "npm run dev --prefix gateway",
+    "auth": "npm run dev --prefix services/auth",
+    "users": "npm run dev --prefix services/users",
+    "products": "npm run dev --prefix services/products",
+    "orders": "npm run dev --prefix services/orders",
+    "dev": "concurrently \"npm run gateway\" \"npm run auth\" \"npm run users\" \"npm run products\" \"npm run orders\"",
+    "seed": "node --env-file .env database/seeds/seed-admin.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.107.0",
+    "bcryptjs": "^3.0.3"
+  }
+}
