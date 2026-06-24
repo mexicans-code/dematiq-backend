@@ -98,9 +98,8 @@ const createPreference = async (req, res, next) => {
       })
       .eq('id', order.id);
 
-    const isSandbox = process.env.MERCADO_PAGO_SANDBOX === 'true';
     successResponse(res, {
-      init_point: isSandbox ? result.sandbox_init_point : result.init_point,
+      init_point: result.init_point,
       preference_id: result.id,
     });
   } catch (err) {
