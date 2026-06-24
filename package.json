@@ -3,13 +3,13 @@
   "version": "1.0.0",
   "description": "Dematiq - Backend con microservicios",
   "scripts": {
-    "gateway": "npm run dev --prefix gateway",
-    "auth": "npm run dev --prefix services/auth",
-    "users": "npm run dev --prefix services/users",
-    "products": "npm run dev --prefix services/products",
-    "orders": "npm run dev --prefix services/orders",
+    "gateway": "node gateway/src/index.js",
+    "auth": "node services/auth/src/index.js",
+    "users": "node services/users/src/index.js",
+    "products": "node services/products/src/index.js",
+    "orders": "node services/orders/src/index.js",
     "dev": "concurrently \"npm run gateway\" \"npm run auth\" \"npm run users\" \"npm run products\" \"npm run orders\"",
-"start": "concurrently \"npm run start --prefix gateway\" \"npm run start --prefix services/auth\" \"npm run start --prefix services/users\" \"npm run start --prefix services/products\" \"npm run start --prefix services/orders\"",
+    "start": "concurrently \"npm run gateway\" \"npm run auth\" \"npm run users\" \"npm run products\" \"npm run orders\"",
     "seed": "node --env-file .env database/seeds/seed-admin.mjs"
   },
   "devDependencies": {
@@ -17,6 +17,16 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.107.0",
-    "bcryptjs": "^3.0.3"
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "express-http-proxy": "^2.1.1",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mercadopago": "^3.1.0",
+    "morgan": "^1.10.0",
+    "multer": "^2.2.0",
+    "nodemailer": "^8.0.11"
   }
 }
