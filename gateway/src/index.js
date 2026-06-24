@@ -13,9 +13,6 @@ const PORT = process.env.GATEWAY_PORT || 3000;
 app.use(cors());
 app.use(helmet());
 app.use(morgan('dev'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
 app.use('/api', routes);
 
 app.get('/health', (req, res) => {

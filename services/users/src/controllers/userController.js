@@ -5,7 +5,7 @@ const getAll = async (req, res, next) => {
   try {
     const { data: profiles, error } = await supabase
       .from('profiles')
-      .select('id, name, email, phone, role, company_name, rfc, created_at');
+      .select('id, name, email, phone, role, company_name, rfc, status, created_at');
 
     if (error) throw error;
     successResponse(res, profiles || []);
@@ -18,7 +18,7 @@ const getById = async (req, res, next) => {
   try {
     const { data: profile, error } = await supabase
       .from('profiles')
-      .select('id, name, email, phone, role, company_name, rfc, created_at')
+      .select('id, name, email, phone, role, company_name, rfc, status, created_at')
       .eq('id', req.params.id)
       .maybeSingle();
 
@@ -33,20 +33,22 @@ const getById = async (req, res, next) => {
 
 const update = async (req, res, next) => {
   try {
-    const { name, email, phone, company_name, rfc } = req.body;
+    const { name, email, phone, company_name, rfc, role, status } = req.body;
     const updates = {};
     if (name) updates.name = name;
     if (email) updates.email = email;
     if (phone !== undefined) updates.phone = phone;
     if (company_name !== undefined) updates.company_name = company_name;
     if (rfc !== undefined) updates.rfc = rfc;
+    if (role !== undefined) updates.role = role;
+    if (status !== undefined) updates.status = status;
     updates.updated_at = new Date().toISOString();
 
     const { data: profile, error } = await supabase
       .from('profiles')
       .update(updates)
       .eq('id', req.params.id)
-      .select('id, name, email, phone, role, company_name, rfc')
+      .select('id, name, email, phone, role, company_name, rfc, status')
       .single();
 
     if (error) {
@@ -64,11 +66,11 @@ const _delete = async (req, res, next) => {
   try {
     const { error } = await supabase
       .from('profiles')
-      .delete()
+      .update({ status: 'inactive', updated_at: new Date().toISOString() })
       .eq('id', req.params.id);
 
     if (error) throw error;
-    successResponse(res, null, 'Usuario eliminado');
+    successResponse(res, null, 'Usuario deshabilitado');
   } catch (err) {
     next(err);
   }

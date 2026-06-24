@@ -9,6 +9,7 @@
     "products": "npm run dev --prefix services/products",
     "orders": "npm run dev --prefix services/orders",
     "dev": "concurrently \"npm run gateway\" \"npm run auth\" \"npm run users\" \"npm run products\" \"npm run orders\"",
+"start": "concurrently \"npm run start --prefix gateway\" \"npm run start --prefix services/auth\" \"npm run start --prefix services/users\" \"npm run start --prefix services/products\" \"npm run start --prefix services/orders\"",
     "seed": "node --env-file .env database/seeds/seed-admin.mjs"
   },
   "devDependencies": {

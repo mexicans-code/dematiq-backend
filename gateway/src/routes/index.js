@@ -19,5 +19,8 @@ router.use('/products', proxyWithPrefix(PRODUCTS_SERVICE, '/products'));
 router.use('/orders', proxyWithPrefix(ORDERS_SERVICE, '/orders'));
 router.use('/payments', proxyWithPrefix(ORDERS_SERVICE, '/payments'));
 router.use('/categories', proxyWithPrefix(PRODUCTS_SERVICE, '/categories'));
+router.use('/brands', proxyWithPrefix(PRODUCTS_SERVICE, '/brands'));
+router.use('/quotations', proxyWithPrefix(PRODUCTS_SERVICE, '/quotations'));
+router.use('/upload', proxyWithPrefix(PRODUCTS_SERVICE, '/upload'));
 
 module.exports = router;

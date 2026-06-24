@@ -1,4 +1,4 @@
-const { MercadoPagoConfig, Preference, Payment, MerchantOrder } = require('mercadopago');
+const { MercadoPagoConfig, Preference, Payment, MerchantOrder, PaymentRefund } = require('mercadopago');
 const supabase = require('../../../../common/src/supabase');
 const { successResponse, errorResponse } = require('../../../../common/src/utils/response');
 
@@ -29,7 +29,7 @@ const createPreference = async (req, res, next) => {
 
     const items = order.order_items.map((item) => ({
       id: String(item.product_id),
-      title: `Producto #${item.product_id}`,
+      title: `Producto`,
       description: `Cantidad: ${item.quantity}`,
       quantity: Number(item.quantity),
       unit_price: Number(item.unit_price),
@@ -39,7 +39,6 @@ const createPreference = async (req, res, next) => {
     const body = {
       items,
       external_reference: String(order.id),
-      notification_url: `${BACKEND_URL}/api/payments/webhook`,
       back_urls: {
         success: `${FRONTEND_URL}/pago-exitoso?order_id=${order.id}`,
         failure: `${FRONTEND_URL}/carrito`,
@@ -130,4 +129,123 @@ const webhook = async (req, res, next) => {
   }
 };
 
-module.exports = { createPreference, verifyPayment, webhook };
+const reverifyPayment = async (req, res, next) => {
+  try {
+    const { order_id } = req.body;
+
+    if (!order_id) {
+      return errorResponse(res, 'order_id es requerido', 400);
+    }
+
+    const { data: order, error } = await supabase
+      .from('orders')
+      .select('mp_order_id, status')
+      .eq('id', order_id)
+      .single();
+
+    if (error || !order) {
+      return errorResponse(res, 'Orden no encontrada', 404);
+    }
+
+    if (!order.mp_order_id) {
+      return errorResponse(res, 'Esta orden no tiene referencia de pago de Mercado Pago', 400);
+    }
+
+    const response = await fetch(
+      `https://api.mercadopago.com/v1/payments/search?external_reference=${order_id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.MERCADO_PAGO_ACCESS_TOKEN}`,
+        },
+      }
+    );
+    const result = await response.json();
+
+    if (!result.results || result.results.length === 0) {
+      return errorResponse(res, 'No se encontraron pagos en Mercado Pago para esta orden', 404);
+    }
+
+    const payment = result.results[0];
+    const { status, id: payment_id } = payment;
+
+    if (status === 'approved') {
+      await supabase
+        .from('orders')
+        .update({ status: 'confirmed', updated_at: new Date().toISOString() })
+        .eq('id', order_id);
+
+      return successResponse(res, { status: 'approved', payment_id }, 'Pago confirmado');
+    }
+
+    successResponse(res, { status, payment_id }, 'Estado del pago en Mercado Pago');
+  } catch (err) {
+    next(err);
+  }
+};
+
+const processCardPayment = async (req, res, next) => {
+  try {
+    const { order_id, card_token, installments, payer_email } = req.body;
+
+    if (!order_id || !card_token) {
+      return errorResponse(res, 'order_id y card_token son requeridos', 400);
+    }
+
+    const { data: order, error } = await supabase
+      .from('orders')
+      .select('*, order_items(*)')
+      .eq('id', order_id)
+      .single();
+
+    if (error || !order) {
+      return errorResponse(res, 'Orden no encontrada', 404);
+    }
+
+    if (order.status !== 'pending') {
+      return errorResponse(res, 'La orden ya fue procesada', 400);
+    }
+
+    const paymentData = {
+      transaction_amount: Number(order.total),
+      token: card_token,
+      description: `Orden #${order.id}`,
+      installments: Number(installments) || 1,
+      payer: {
+        email: payer_email,
+      },
+    };
+
+    const payment = await new Payment(client).create({ body: paymentData });
+
+    if (payment.status === 'approved') {
+      await supabase
+        .from('orders')
+        .update({ status: 'confirmed', updated_at: new Date().toISOString() })
+        .eq('id', order.id);
+
+      for (const item of order.order_items) {
+        const { data: product } = await supabase
+          .from('products')
+          .select('stock')
+          .eq('id', item.product_id)
+          .single();
+
+        await supabase
+          .from('products')
+          .update({ stock: product.stock - item.quantity })
+          .eq('id', item.product_id);
+      }
+
+      return successResponse(res, { status: 'approved', payment_id: payment.id }, 'Pago aprobado');
+    }
+
+    successResponse(res, { status: payment.status, payment_id: payment.id }, 'Estado del pago');
+  } catch (err) {
+    if (err.cause && err.cause[0]?.error === 'invalid_card_token') {
+      return errorResponse(res, 'Token de tarjeta inválido', 400);
+    }
+    next(err);
+  }
+};
+
+module.exports = { createPreference, verifyPayment, webhook, reverifyPayment, processCardPayment };

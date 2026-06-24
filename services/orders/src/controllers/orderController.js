@@ -42,7 +42,7 @@ const getById = async (req, res, next) => {
 
 const create = async (req, res, next) => {
   try {
-    const { user_id, items, shipping_address_id, notes } = req.body;
+    const { user_id, items, shipping_address_id, notes, shipping_address } = req.body;
 
     if (!user_id || !items || !items.length) {
       return errorResponse(res, 'user_id y items son requeridos', 400);
@@ -51,27 +51,61 @@ const create = async (req, res, next) => {
     const productIds = items.map(i => i.product_id);
     const { data: products, error: prodError } = await supabase
       .from('products')
-      .select('id, price')
+      .select('id, price, stock')
       .in('id', productIds);
 
     if (prodError) throw prodError;
 
     const productMap = {};
     for (const p of products) {
-      productMap[p.id] = p.price;
+      productMap[p.id] = p;
     }
 
+    for (const item of items) {
+      const product = productMap[item.product_id];
+      if (!product) {
+        return errorResponse(res, `Producto ID ${item.product_id} no encontrado`, 400);
+      }
+      if (product.stock < item.quantity) {
+        return errorResponse(res, `Stock insuficiente para el producto ID ${item.product_id}`, 400);
+      }
+    }
+
+    const IVA = 0.16;
     const orderItems = items.map(item => ({
       product_id: item.product_id,
       quantity: item.quantity,
-      unit_price: productMap[item.product_id] || item.price,
+      unit_price: productMap[item.product_id].price,
     }));
 
-    const total = orderItems.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
+    const subtotal = orderItems.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
+    const total = Math.round(subtotal * (1 + IVA) * 100) / 100;
+
+    let finalShippingAddressId = shipping_address_id;
+
+    if (shipping_address && !finalShippingAddressId) {
+      const { data: addr, error: addrError } = await supabase
+        .from('addresses')
+        .insert({
+          user_id,
+          company_name: shipping_address.company || null,
+          contact_name: shipping_address.contact || null,
+          street: shipping_address.street,
+          city: shipping_address.city,
+          state: shipping_address.state || 'N/A',
+          zip: shipping_address.zip,
+          country: shipping_address.country || 'México',
+        })
+        .select('id')
+        .single();
+
+      if (addrError) throw addrError;
+      finalShippingAddressId = addr.id;
+    }
 
     const { data: order, error } = await supabase
       .from('orders')
-      .insert({ user_id, total, shipping_address_id, notes })
+      .insert({ user_id, total, shipping_address_id: finalShippingAddressId, notes })
       .select('id, user_id, total, status, notes, created_at')
       .single();
 
