@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Dematiq - Backend con microservicios",
   "scripts": {
-    "postinstall": "cd common && npm install && cd ../gateway && npm install && cd ../services/auth && npm install && cd ../users && npm install && cd ../products && npm install && cd ../orders && npm install",
     "gateway": "npm run dev --prefix gateway",
     "auth": "npm run dev --prefix services/auth",
     "users": "npm run dev --prefix services/users",
