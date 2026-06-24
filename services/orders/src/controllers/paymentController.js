@@ -9,6 +9,30 @@ const client = new MercadoPagoConfig({
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000';
 
+const decrementStock = async (orderId) => {
+  const { data: orderItems, error } = await supabase
+    .from('order_items')
+    .select('product_id, quantity')
+    .eq('order_id', orderId);
+
+  if (error || !orderItems) return;
+
+  for (const item of orderItems) {
+    const { data: product } = await supabase
+      .from('products')
+      .select('stock')
+      .eq('id', item.product_id)
+      .single();
+
+    if (product) {
+      await supabase
+        .from('products')
+        .update({ stock: Math.max(0, product.stock - item.quantity) })
+        .eq('id', item.product_id);
+    }
+  }
+};
+
 const createPreference = async (req, res, next) => {
   try {
     const { order_id } = req.body;
@@ -27,12 +51,26 @@ const createPreference = async (req, res, next) => {
       return errorResponse(res, 'Orden no encontrada', 404);
     }
 
+    const productIds = order.order_items.map(i => i.product_id);
+    const { data: products } = await supabase
+      .from('products')
+      .select('id, name')
+      .in('id', productIds);
+
+    const productNames = {};
+    if (products) {
+      for (const p of products) {
+        productNames[p.id] = p.name;
+      }
+    }
+
+    const IVA = 0.16;
     const items = order.order_items.map((item) => ({
       id: String(item.product_id),
-      title: `Producto`,
+      title: productNames[item.product_id] || `Producto #${item.product_id}`,
       description: `Cantidad: ${item.quantity}`,
       quantity: Number(item.quantity),
-      unit_price: Number(item.unit_price),
+      unit_price: Math.round(Number(item.unit_price) * (1 + IVA) * 100) / 100,
       currency_id: 'MXN',
     }));
 
@@ -88,6 +126,7 @@ const verifyPayment = async (req, res, next) => {
           .from('orders')
           .update({ status: 'confirmed', updated_at: new Date().toISOString() })
           .eq('id', targetOrder);
+        await decrementStock(targetOrder);
       }
       return successResponse(res, { status: 'approved' }, 'Pago confirmado');
     }
@@ -121,6 +160,7 @@ const webhook = async (req, res, next) => {
         .from('orders')
         .update({ status: 'confirmed', updated_at: new Date().toISOString() })
         .eq('id', external_reference);
+      await decrementStock(external_reference);
     }
 
     res.sendStatus(200);
@@ -173,6 +213,7 @@ const reverifyPayment = async (req, res, next) => {
         .from('orders')
         .update({ status: 'confirmed', updated_at: new Date().toISOString() })
         .eq('id', order_id);
+      await decrementStock(order_id);
 
       return successResponse(res, { status: 'approved', payment_id }, 'Pago confirmado');
     }
