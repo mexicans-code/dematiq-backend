@@ -7,7 +7,7 @@ const client = new MercadoPagoConfig({
 });
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000';
+const BACKEND_URL = process.env.BACKEND_URL || 'https://dematiq-backend.onrender.com';
 
 const decrementStock = async (orderId) => {
   const { data: orderItems, error } = await supabase
@@ -82,6 +82,30 @@ const createPreference = async (req, res, next) => {
       currency_id: 'MXN',
     }));
 
+    let shipments = {};
+    if (order.shipping_address_id) {
+      const { data: addr } = await supabase
+        .from('addresses')
+        .select('*')
+        .eq('id', order.shipping_address_id)
+        .single();
+      if (addr) {
+        shipments = {
+          receiver_address: {
+            zip_code: addr.zip || '',
+            street_name: addr.street || '',
+            street_number: null,
+            floor: '',
+            apartment: '',
+            city_name: addr.city || '',
+            state_name: addr.state || '',
+            country_name: addr.country || 'México',
+            neighborhood: '',
+          },
+        };
+      }
+    }
+
     const body = {
       items,
       external_reference: String(order.id),
@@ -96,6 +120,7 @@ const createPreference = async (req, res, next) => {
         email: order.profiles?.email || 'comprador@email.com',
         name: order.profiles?.name || 'Comprador',
       },
+      shipments,
     };
 
     const result = await new Preference(client).create({ body });
