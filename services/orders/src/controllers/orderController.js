@@ -1,6 +1,31 @@
 const supabase = require('../../../../common/src/supabase');
 const { successResponse, errorResponse } = require('../../../../common/src/utils/response');
 
+async function enrichOrders(orders) {
+  if (!orders || !orders.length) return orders || [];
+
+  const allProductIds = [...new Set(orders.flatMap(o => (o.order_items || []).map(i => i.product_id)))];
+  const addressIds = orders.filter(o => o.shipping_address_id).map(o => o.shipping_address_id);
+
+  let productMap = {};
+  if (allProductIds.length > 0) {
+    const { data: products } = await supabase.from('products').select('id, name').in('id', allProductIds);
+    for (const p of products || []) productMap[p.id] = p.name;
+  }
+
+  let addressMap = {};
+  if (addressIds.length > 0) {
+    const { data: addresses } = await supabase.from('addresses').select('*').in('id', addressIds);
+    for (const a of addresses || []) addressMap[a.id] = a;
+  }
+
+  return orders.map(o => ({
+    ...o,
+    order_items: (o.order_items || []).map(i => ({ ...i, product_name: productMap[i.product_id] || 'Producto' })),
+    shipping_address: addressMap[o.shipping_address_id] || null,
+  }));
+}
+
 const getAll = async (req, res, next) => {
   try {
     let query = supabase
@@ -17,7 +42,8 @@ const getAll = async (req, res, next) => {
     const { data: orders, error } = await query;
 
     if (error) throw error;
-    successResponse(res, orders || []);
+    const enriched = await enrichOrders(orders);
+    successResponse(res, enriched);
   } catch (err) {
     next(err);
   }
@@ -34,7 +60,8 @@ const getById = async (req, res, next) => {
     if (error) throw error;
     if (!order) return errorResponse(res, 'Orden no encontrada', 404);
 
-    successResponse(res, order);
+    const enriched = await enrichOrders([order]);
+    successResponse(res, enriched[0]);
   } catch (err) {
     next(err);
   }
@@ -122,11 +149,14 @@ const create = async (req, res, next) => {
 
     if (itemsError) throw itemsError;
 
-    const { data: fullOrder } = await supabase
+    let { data: fullOrder } = await supabase
       .from('orders')
-      .select('*, order_items(*)')
+      .select('*, order_items(*), profiles!inner(name, email)')
       .eq('id', order.id)
       .single();
+
+    const enriched = await enrichOrders([fullOrder]);
+    fullOrder = enriched[0];
 
     successResponse(res, fullOrder, 'Orden creada', 201);
   } catch (err) {
@@ -143,11 +173,11 @@ const updateStatus = async (req, res, next) => {
       return errorResponse(res, `Estado inválido. Valores: ${validStatuses.join(', ')}`, 400);
     }
 
-    const { data: order, error } = await supabase
+    let { data: order, error } = await supabase
       .from('orders')
       .update({ status, updated_at: new Date().toISOString() })
       .eq('id', req.params.id)
-      .select('*, order_items(*)')
+      .select('*, order_items(*), profiles!inner(name, email)')
       .single();
 
     if (error) {
@@ -155,6 +185,8 @@ const updateStatus = async (req, res, next) => {
       throw error;
     }
 
+    const enriched = await enrichOrders([order]);
+    order = enriched[0];
     successResponse(res, order, 'Estado de orden actualizado');
   } catch (err) {
     next(err);
