@@ -41,14 +41,22 @@ const createPreference = async (req, res, next) => {
       return errorResponse(res, 'order_id es requerido', 400);
     }
 
+    if (!process.env.MERCADO_PAGO_ACCESS_TOKEN) {
+      return errorResponse(res, 'MERCADO_PAGO_ACCESS_TOKEN no configurado en el servidor', 500);
+    }
+
     const { data: order, error } = await supabase
       .from('orders')
-      .select('*, order_items(*), profiles!inner(name, email)')
+      .select('*, order_items(*), profiles(name, email)')
       .eq('id', order_id)
       .single();
 
     if (error || !order) {
       return errorResponse(res, 'Orden no encontrada', 404);
+    }
+
+    if (!order.order_items?.length) {
+      return errorResponse(res, 'La orden no tiene productos. Crea el pedido nuevamente.', 400);
     }
 
     const productIds = order.order_items.map(i => i.product_id);
@@ -80,8 +88,10 @@ const createPreference = async (req, res, next) => {
       back_urls: {
         success: `${FRONTEND_URL}/pago-exitoso?order_id=${order.id}`,
         failure: `${FRONTEND_URL}/carrito`,
-        pending: `${FRONTEND_URL}/carrito`,
+        pending: `${FRONTEND_URL}/pago-exitoso?order_id=${order.id}`,
       },
+      auto_return: 'approved',
+      notification_url: `${BACKEND_URL}/api/payments/webhook`,
       payer: {
         email: order.profiles?.email || 'comprador@email.com',
         name: order.profiles?.name || 'Comprador',
@@ -98,11 +108,17 @@ const createPreference = async (req, res, next) => {
       })
       .eq('id', order.id);
 
-    successResponse(res, {
-      init_point: result.init_point,
+    const isTestToken = process.env.MERCADO_PAGO_ACCESS_TOKEN.startsWith('TEST-');
+
+    return successResponse(res, {
+      init_point: isTestToken ? (result.sandbox_init_point || result.init_point) : result.init_point,
       preference_id: result.id,
     });
   } catch (err) {
+    const mpMessage = err.cause?.[0]?.description || err.message;
+    console.error('[Mercado Pago]', mpMessage, err.cause || '');
+    err.statusCode = err.statusCode || 502;
+    err.message = mpMessage || 'Error al crear la preferencia de pago';
     next(err);
   }
 };
