@@ -16,7 +16,7 @@ async function uploadBase64Image(dataUrl) {
     .from('imagenes-productos')
     .upload(fileName, buffer, { contentType: `image/${ext}`, upsert: false });
 
-  if (error) return null;
+  if (error) { console.error('[Quotation] Upload error:', error.message, fileName); return null; }
 
   const { data: publicUrlData } = supabase.storage
     .from('imagenes-productos')
@@ -30,13 +30,13 @@ async function resolveImages(items, customProducts) {
 
   for (const item of resolved.items) {
     if (item.image && isDataUrl(item.image)) {
-      item.image = await uploadBase64Image(item.image) || item.image;
+      item.image = await uploadBase64Image(item.image);
     }
   }
 
   for (const p of resolved.customProducts) {
     if (p.image && isDataUrl(p.image)) {
-      p.image = await uploadBase64Image(p.image) || p.image;
+      p.image = await uploadBase64Image(p.image);
     }
   }
 
