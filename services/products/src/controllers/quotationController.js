@@ -8,15 +8,24 @@ function isDataUrl(str) {
 async function uploadBase64Image(dataUrl) {
   const matches = dataUrl.match(/^data:image\/(\w+);base64,(.+)$/);
   if (!matches) return null;
-  const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+  const mime = matches[1];
+  const ext = mime === 'jpeg' ? 'jpg' : mime;
   const buffer = Buffer.from(matches[2], 'base64');
   const fileName = `quotation-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
 
-  const { error } = await supabase.storage
+  let { error } = await supabase.storage
     .from('imagenes-productos')
-    .upload(fileName, buffer, { contentType: `image/${ext}`, upsert: false });
+    .upload(fileName, buffer, { contentType: `image/${mime}`, upsert: false });
 
-  if (error) { console.error('[Quotation] Upload error:', error.message, fileName); return null; }
+  if (error && error.message?.includes('Bucket not found')) {
+    await supabase.storage.createBucket('imagenes-productos', { public: true }).catch(() => {});
+    const retry = await supabase.storage
+      .from('imagenes-productos')
+      .upload(fileName, buffer, { contentType: `image/${mime}`, upsert: false });
+    error = retry.error;
+  }
+
+  if (error) { console.error('[Quotation] Upload error:', error.message); return null; }
 
   const { data: publicUrlData } = supabase.storage
     .from('imagenes-productos')
