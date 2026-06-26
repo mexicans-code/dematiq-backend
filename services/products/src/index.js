@@ -1,5 +1,7 @@
 const path = require('path');
 try { require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') }) } catch (e) {}
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
