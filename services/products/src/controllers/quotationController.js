@@ -132,7 +132,7 @@ const send = async (req, res, next) => {
     const emailHtml = buildEmailHtml({ empresa, contacto, telefono, email, notas, items: resolvedItems, customProducts: resolvedCustom });
     const fromEmail = process.env.EMAIL_FROM || process.env.EMAIL_API_KEY.startsWith('re_') ? 'onboarding@resend.dev' : 'noreply@dematiq.com';
 
-    const res = await fetch('https://api.resend.com/emails', {
+    const emailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.EMAIL_API_KEY}`,
@@ -140,16 +140,16 @@ const send = async (req, res, next) => {
       },
       body: JSON.stringify({
         from: `"${empresa || 'Solicitud Cotización'}" <${fromEmail}>`,
-        to: process.env.QUOTATION_EMAIL || process.env.EMAIL_API_KEY.startsWith('re_') ? 'delivered@resend.dev' : 'admin@dematiq.com',
+        to: process.env.QUOTATION_EMAIL || (process.env.EMAIL_API_KEY.startsWith('re_') ? 'delivered@resend.dev' : 'admin@dematiq.com'),
         reply_to: email,
         subject: `Cotización - ${empresa || contacto || 'Nueva solicitud'}`,
         html: emailHtml,
       }),
     });
 
-    if (!res.ok) {
-      const errBody = await res.text();
-      throw new Error(`Email API error: ${res.status} ${errBody}`);
+    if (!emailRes.ok) {
+      const errBody = await emailRes.text();
+      throw new Error(`Email API error: ${emailRes.status} ${errBody}`);
     }
 
     successResponse(res, null, 'Cotización enviada correctamente');
