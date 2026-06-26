@@ -27,11 +27,14 @@ async function uploadBase64Image(dataUrl) {
 
   if (error) { console.error('[Quotation] Upload error:', error.message); return null; }
 
-  const { data: publicUrlData } = supabase.storage
-    .from('imagenes-productos')
-    .getPublicUrl(fileName);
+  await supabase.storage.updateBucket('imagenes-productos', { public: true }).catch(() => {});
 
-  return publicUrlData.publicUrl;
+  const { data: signedUrlData, error: signError } = await supabase.storage
+    .from('imagenes-productos')
+    .createSignedUrl(fileName, 31536000);
+
+  if (signError || !signedUrlData) return null;
+  return signedUrlData.signedUrl;
 }
 
 async function resolveImages(items, customProducts) {
