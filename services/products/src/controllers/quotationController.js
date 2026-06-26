@@ -126,6 +126,10 @@ const send = async (req, res, next) => {
 
     const { items: resolvedItems, customProducts: resolvedCustom } = await resolveImages(items, customProducts);
 
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      return errorResponse(res, 'Error de configuración del servidor de correo', 500);
+    }
+
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
       port: parseInt(process.env.SMTP_PORT, 10) || 587,
@@ -134,6 +138,7 @@ const send = async (req, res, next) => {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
+      family: 4,
     });
 
     const mailOptions = {
