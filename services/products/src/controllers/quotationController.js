@@ -1,4 +1,3 @@
-const nodemailer = require('nodemailer');
 const supabase = require('../../../../common/src/supabase');
 const { successResponse, errorResponse } = require('../../../../common/src/utils/response');
 
@@ -126,30 +125,32 @@ const send = async (req, res, next) => {
 
     const { items: resolvedItems, customProducts: resolvedCustom } = await resolveImages(items, customProducts);
 
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      return errorResponse(res, 'Error de configuración del servidor de correo', 500);
+    if (!process.env.EMAIL_API_KEY) {
+      return errorResponse(res, 'Error de configuración del servicio de correo', 500);
     }
 
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT, 10) || 587,
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+    const emailHtml = buildEmailHtml({ empresa, contacto, telefono, email, notas, items: resolvedItems, customProducts: resolvedCustom });
+    const fromEmail = process.env.EMAIL_FROM || process.env.EMAIL_API_KEY.startsWith('re_') ? 'onboarding@resend.dev' : 'noreply@dematiq.com';
+
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.EMAIL_API_KEY}`,
+        'Content-Type': 'application/json',
       },
-      family: 4,
+      body: JSON.stringify({
+        from: `"${empresa || 'Solicitud Cotización'}" <${fromEmail}>`,
+        to: process.env.QUOTATION_EMAIL || process.env.EMAIL_API_KEY.startsWith('re_') ? 'delivered@resend.dev' : 'admin@dematiq.com',
+        reply_to: email,
+        subject: `Cotización - ${empresa || contacto || 'Nueva solicitud'}`,
+        html: emailHtml,
+      }),
     });
 
-    const mailOptions = {
-      from: `"${empresa || 'Solicitud Cotización'}" <${process.env.SMTP_USER}>`,
-      to: process.env.QUOTATION_EMAIL,
-      replyTo: email,
-      subject: `Cotización - ${empresa || contacto || 'Nueva solicitud'}`,
-      html: buildEmailHtml({ empresa, contacto, telefono, email, notas, items: resolvedItems, customProducts: resolvedCustom }),
-    };
-
-    await transporter.sendMail(mailOptions);
+    if (!res.ok) {
+      const errBody = await res.text();
+      throw new Error(`Email API error: ${res.status} ${errBody}`);
+    }
 
     successResponse(res, null, 'Cotización enviada correctamente');
   } catch (err) {
