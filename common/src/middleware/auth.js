@@ -17,4 +17,14 @@ function verifyToken(req, res, next) {
   }
 }
 
-module.exports = { verifyToken };
+function extractUser(req, res, next) {
+  const id = req.headers['x-user-id'];
+  const role = req.headers['x-user-role'];
+  const name = req.headers['x-user-name'];
+  if (id) {
+    req.user = { id, role, name };
+  }
+  next();
+}
+
+module.exports = { verifyToken, extractUser };

@@ -111,4 +111,43 @@ const getMe = async (req, res, next) => {
   }
 };
 
-module.exports = { register, login, getMe };
+const changePassword = async (req, res, next) => {
+  try {
+    const { current, newPass } = req.body;
+
+    if (!current || !newPass) {
+      return errorResponse(res, 'Contraseña actual y nueva son requeridas', 400);
+    }
+    if (newPass.length < 6) {
+      return errorResponse(res, 'La nueva contraseña debe tener al menos 6 caracteres', 400);
+    }
+
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('password_hash')
+      .eq('id', req.user.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!profile) return errorResponse(res, 'Usuario no encontrado', 404);
+
+    const isMatch = await bcrypt.compare(current, profile.password_hash);
+    if (!isMatch) {
+      return errorResponse(res, 'La contraseña actual es incorrecta', 401);
+    }
+
+    const password_hash = await bcrypt.hash(newPass, 10);
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ password_hash, updated_at: new Date().toISOString() })
+      .eq('id', req.user.id);
+
+    if (updateError) throw updateError;
+
+    successResponse(res, null, 'Contraseña actualizada exitosamente');
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { register, login, getMe, changePassword };

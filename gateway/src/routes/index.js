@@ -1,6 +1,7 @@
 const express = require('express');
 const proxy = require('express-http-proxy');
 const router = express.Router();
+const { verifyToken, adminForWrites, requireAdmin } = require('../middleware/auth');
 
 const AUTH_SERVICE = process.env.AUTH_SERVICE_URL || 'http://localhost:3001';
 const USERS_SERVICE = process.env.USERS_SERVICE_URL || 'http://localhost:3002';
@@ -10,17 +11,32 @@ const ORDERS_SERVICE = process.env.ORDERS_SERVICE_URL || 'http://localhost:3004'
 function proxyWithPrefix(target, prefix) {
   return proxy(target, {
     proxyReqPathResolver: (req) => `${prefix}${req.url}`,
+    proxyReqOptDecorator: (proxyReqOpts, srcReq) => {
+      if (srcReq.user) {
+        proxyReqOpts.headers['x-user-id'] = srcReq.user.id;
+        proxyReqOpts.headers['x-user-role'] = srcReq.user.role;
+        proxyReqOpts.headers['x-user-name'] = srcReq.user.name || '';
+      }
+      return proxyReqOpts;
+    },
   });
 }
 
+// Public
 router.use('/auth', proxyWithPrefix(AUTH_SERVICE, '/auth'));
-router.use('/users', proxyWithPrefix(USERS_SERVICE, '/users'));
-router.use('/products', proxyWithPrefix(PRODUCTS_SERVICE, '/products'));
-router.use('/orders', proxyWithPrefix(ORDERS_SERVICE, '/orders'));
-router.use('/payments', proxyWithPrefix(ORDERS_SERVICE, '/payments'));
-router.use('/categories', proxyWithPrefix(PRODUCTS_SERVICE, '/categories'));
-router.use('/brands', proxyWithPrefix(PRODUCTS_SERVICE, '/brands'));
 router.use('/quotations', proxyWithPrefix(PRODUCTS_SERVICE, '/quotations'));
-router.use('/upload', proxyWithPrefix(PRODUCTS_SERVICE, '/upload'));
+
+// Public reads, admin-only writes
+router.use('/products', adminForWrites, proxyWithPrefix(PRODUCTS_SERVICE, '/products'));
+router.use('/categories', adminForWrites, proxyWithPrefix(PRODUCTS_SERVICE, '/categories'));
+router.use('/brands', adminForWrites, proxyWithPrefix(PRODUCTS_SERVICE, '/brands'));
+
+// Authenticated
+router.use('/orders', verifyToken, proxyWithPrefix(ORDERS_SERVICE, '/orders'));
+router.use('/payments', proxyWithPrefix(ORDERS_SERVICE, '/payments'));
+
+// Admin only
+router.use('/users', requireAdmin, proxyWithPrefix(USERS_SERVICE, '/users'));
+router.use('/upload', requireAdmin, proxyWithPrefix(PRODUCTS_SERVICE, '/upload'));
 
 module.exports = router;

@@ -32,7 +32,10 @@ const getAll = async (req, res, next) => {
       .from('orders')
       .select('*, order_items(*), profiles!inner(name, email)');
 
-    if (req.query.user_id) {
+    const isAdmin = req.user && req.user.role === 'admin';
+    if (!isAdmin) {
+      query = query.eq('user_id', req.user ? req.user.id : 'none');
+    } else if (req.query.user_id) {
       query = query.eq('user_id', req.query.user_id);
     }
     if (req.query.status) {
@@ -59,6 +62,11 @@ const getById = async (req, res, next) => {
 
     if (error) throw error;
     if (!order) return errorResponse(res, 'Orden no encontrada', 404);
+
+    const isAdmin = req.user && req.user.role === 'admin';
+    if (!isAdmin && req.user && order.user_id !== req.user.id) {
+      return errorResponse(res, 'Acceso denegado', 403);
+    }
 
     const enriched = await enrichOrders([order]);
     successResponse(res, enriched[0]);
