@@ -170,4 +170,67 @@ const send = async (req, res, next) => {
   }
 };
 
-module.exports = { send };
+const sendContact = async (req, res, next) => {
+  try {
+    const { nombre, empresa, email, telefono, mensaje } = req.body;
+
+    if (!nombre || !email || !mensaje) {
+      return errorResponse(res, 'nombre, email y mensaje son requeridos', 400);
+    }
+
+    if (!process.env.EMAIL_API_KEY) {
+      return errorResponse(res, 'Error de configuración del servicio de correo', 500);
+    }
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family:Arial,sans-serif;background:#f5f5f5;padding:20px">
+  <table style="max-width:600px;margin:0 auto;background:white;border-radius:12px;overflow:hidden">
+    <tr><td style="background:#004B87;padding:24px;text-align:center">
+      <h1 style="color:white;margin:0;font-size:20px">Nuevo Mensaje de Contacto</h1>
+    </td></tr>
+    <tr><td style="padding:24px">
+      <table style="width:100%;border-collapse:collapse">
+        <tr><td style="padding:6px 0;color:#666;font-size:13px;width:100px">Nombre</td><td style="padding:6px 0;font-size:13px"><strong>${nombre}</strong></td></tr>
+        <tr><td style="padding:6px 0;color:#666;font-size:13px">Empresa</td><td style="padding:6px 0;font-size:13px"><strong>${empresa || '-'}</strong></td></tr>
+        <tr><td style="padding:6px 0;color:#666;font-size:13px">Email</td><td style="padding:6px 0;font-size:13px"><strong>${email}</strong></td></tr>
+        <tr><td style="padding:6px 0;color:#666;font-size:13px">Teléfono</td><td style="padding:6px 0;font-size:13px"><strong>${telefono || '-'}</strong></td></tr>
+        <tr><td style="padding:6px 0;color:#666;font-size:13px;vertical-align:top">Mensaje</td><td style="padding:6px 0;font-size:13px"><strong>${mensaje}</strong></td></tr>
+      </table>
+    </td></tr>
+    <tr><td style="background:#f9f9f9;padding:16px;text-align:center;font-size:11px;color:#999">
+      Dematiq - Mensaje de contacto desde el sitio web
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    const emailRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.EMAIL_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: `"${nombre}" <${process.env.EMAIL_FROM || 'onboarding@resend.dev'}>`,
+        to: process.env.QUOTATION_EMAIL,
+        reply_to: email,
+        subject: `Contacto - ${nombre}${empresa ? ` (${empresa})` : ''}`,
+        html,
+      }),
+    });
+
+    if (!emailRes.ok) {
+      const errBody = await emailRes.text();
+      throw new Error(`Email API error: ${emailRes.status} ${errBody}`);
+    }
+
+    successResponse(res, null, 'Mensaje enviado correctamente');
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { send, sendContact };
