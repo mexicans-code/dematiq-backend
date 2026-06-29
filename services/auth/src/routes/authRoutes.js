@@ -16,5 +16,6 @@ router.post('/register', authLimiter, authController.register);
 router.post('/login', authLimiter, authController.login);
 router.get('/me', authController.getMe);
 router.patch('/password', verifyToken, authController.changePassword);
+router.patch('/profile', verifyToken, authController.updateProfile);
 
 module.exports = router;

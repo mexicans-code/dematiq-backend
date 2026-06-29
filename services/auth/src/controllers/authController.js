@@ -150,4 +150,33 @@ const changePassword = async (req, res, next) => {
   }
 };
 
-module.exports = { register, login, getMe, changePassword };
+const updateProfile = async (req, res, next) => {
+  try {
+    const { name, email } = req.body;
+
+    if (!name && !email) {
+      return errorResponse(res, 'Nombre o email son requeridos', 400);
+    }
+
+    const updates = {};
+    if (name) updates.name = name;
+    if (email) updates.email = email;
+    updates.updated_at = new Date().toISOString();
+
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .update(updates)
+      .eq('id', req.user.id)
+      .select('id, name, email, phone, role, company_name, rfc')
+      .single();
+
+    if (error) throw error;
+    if (!profile) return errorResponse(res, 'Usuario no encontrado', 404);
+
+    successResponse(res, profile);
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { register, login, getMe, changePassword, updateProfile };
