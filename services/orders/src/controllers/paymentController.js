@@ -24,10 +24,10 @@ const decrementStock = async (orderId) => {
       .eq('id', item.product_id)
       .single();
 
-    if (product) {
+    if (product && product.stock >= item.quantity) {
       await supabase
         .from('products')
-        .update({ stock: Math.max(0, product.stock - item.quantity) })
+        .update({ stock: product.stock - item.quantity })
         .eq('id', item.product_id);
     }
   }
@@ -36,9 +36,14 @@ const decrementStock = async (orderId) => {
 const createPreference = async (req, res, next) => {
   try {
     const { order_id } = req.body;
+    const userId = req.user?.id;
 
     if (!order_id) {
       return errorResponse(res, 'order_id es requerido', 400);
+    }
+
+    if (!userId) {
+      return errorResponse(res, 'Debes iniciar sesión', 401);
     }
 
     if (!process.env.MERCADO_PAGO_ACCESS_TOKEN) {
@@ -53,6 +58,10 @@ const createPreference = async (req, res, next) => {
 
     if (error || !order) {
       return errorResponse(res, 'Orden no encontrada', 404);
+    }
+
+    if (order.user_id !== userId) {
+      return errorResponse(res, 'Acceso denegado', 403);
     }
 
     if (!order.order_items?.length) {
@@ -148,26 +157,54 @@ const createPreference = async (req, res, next) => {
   }
 };
 
+const confirmOrder = async (orderId, paymentId) => {
+  const { data: order } = await supabase
+    .from('orders')
+    .select('status, mp_payment_id')
+    .eq('id', orderId)
+    .single();
+
+  if (!order || order.status === 'confirmed') return;
+
+  await supabase
+    .from('orders')
+    .update({
+      status: 'confirmed',
+      mp_payment_id: paymentId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', orderId);
+
+  if (!order.mp_payment_id) {
+    await decrementStock(orderId);
+  }
+};
+
 const verifyPayment = async (req, res, next) => {
   try {
-    const { payment_id, order_id } = req.body;
+    const { payment_id } = req.body;
 
     if (!payment_id) {
       return errorResponse(res, 'payment_id es requerido', 400);
     }
 
+    const userId = req.user?.id;
     const payment = await new Payment(client).get({ id: payment_id });
     const { status, external_reference } = payment;
 
-    if (status === 'approved') {
-      const targetOrder = external_reference || order_id;
-      if (targetOrder) {
-        await supabase
+    if (status === 'approved' && external_reference) {
+      if (userId) {
+        const { data: order } = await supabase
           .from('orders')
-          .update({ status: 'confirmed', updated_at: new Date().toISOString() })
-          .eq('id', targetOrder);
-        await decrementStock(targetOrder);
+          .select('user_id')
+          .eq('id', external_reference)
+          .single();
+
+        if (order && order.user_id !== userId && req.user?.role !== 'admin') {
+          return errorResponse(res, 'Acceso denegado', 403);
+        }
       }
+      await confirmOrder(external_reference, payment_id);
       return successResponse(res, { status: 'approved' }, 'Pago confirmado');
     }
 
@@ -196,11 +233,7 @@ const webhook = async (req, res, next) => {
     const { status, external_reference } = payment;
 
     if (status === 'approved' && external_reference) {
-      await supabase
-        .from('orders')
-        .update({ status: 'confirmed', updated_at: new Date().toISOString() })
-        .eq('id', external_reference);
-      await decrementStock(external_reference);
+      await confirmOrder(external_reference, paymentId);
     }
 
     res.sendStatus(200);
@@ -212,6 +245,7 @@ const webhook = async (req, res, next) => {
 const reverifyPayment = async (req, res, next) => {
   try {
     const { order_id } = req.body;
+    const userId = req.user?.id;
 
     if (!order_id) {
       return errorResponse(res, 'order_id es requerido', 400);
@@ -219,12 +253,16 @@ const reverifyPayment = async (req, res, next) => {
 
     const { data: order, error } = await supabase
       .from('orders')
-      .select('mp_order_id, status')
+      .select('mp_order_id, status, user_id')
       .eq('id', order_id)
       .single();
 
     if (error || !order) {
       return errorResponse(res, 'Orden no encontrada', 404);
+    }
+
+    if (order.user_id !== userId && req.user?.role !== 'admin') {
+      return errorResponse(res, 'Acceso denegado', 403);
     }
 
     if (!order.mp_order_id) {
@@ -249,12 +287,7 @@ const reverifyPayment = async (req, res, next) => {
     const { status, id: payment_id } = payment;
 
     if (status === 'approved') {
-      await supabase
-        .from('orders')
-        .update({ status: 'confirmed', updated_at: new Date().toISOString() })
-        .eq('id', order_id);
-      await decrementStock(order_id);
-
+      await confirmOrder(order_id, payment_id);
       return successResponse(res, { status: 'approved', payment_id }, 'Pago confirmado');
     }
 
@@ -267,9 +300,14 @@ const reverifyPayment = async (req, res, next) => {
 const processCardPayment = async (req, res, next) => {
   try {
     const { order_id, card_token, installments, payer_email } = req.body;
+    const userId = req.user?.id;
 
     if (!order_id || !card_token) {
       return errorResponse(res, 'order_id y card_token son requeridos', 400);
+    }
+
+    if (!userId) {
+      return errorResponse(res, 'Debes iniciar sesión', 401);
     }
 
     const { data: order, error } = await supabase
@@ -280,6 +318,10 @@ const processCardPayment = async (req, res, next) => {
 
     if (error || !order) {
       return errorResponse(res, 'Orden no encontrada', 404);
+    }
+
+    if (order.user_id !== userId) {
+      return errorResponse(res, 'Acceso denegado', 403);
     }
 
     if (order.status !== 'pending') {
@@ -299,24 +341,7 @@ const processCardPayment = async (req, res, next) => {
     const payment = await new Payment(client).create({ body: paymentData });
 
     if (payment.status === 'approved') {
-      await supabase
-        .from('orders')
-        .update({ status: 'confirmed', updated_at: new Date().toISOString() })
-        .eq('id', order.id);
-
-      for (const item of order.order_items) {
-        const { data: product } = await supabase
-          .from('products')
-          .select('stock')
-          .eq('id', item.product_id)
-          .single();
-
-        await supabase
-          .from('products')
-          .update({ stock: product.stock - item.quantity })
-          .eq('id', item.product_id);
-      }
-
+      await confirmOrder(order.id, payment.id);
       return successResponse(res, { status: 'approved', payment_id: payment.id }, 'Pago aprobado');
     }
 

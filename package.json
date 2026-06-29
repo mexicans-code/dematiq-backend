@@ -10,10 +10,14 @@
     "orders": "node services/orders/src/index.js",
     "dev": "concurrently \"npm run gateway\" \"npm run auth\" \"npm run users\" \"npm run products\" \"npm run orders\"",
     "start": "concurrently \"npm run gateway\" \"npm run auth\" \"npm run users\" \"npm run products\" \"npm run orders\"",
-    "seed": "node --env-file .env database/seeds/seed-admin.mjs"
+    "seed": "node --env-file .env database/seeds/seed-admin.mjs",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "jest": "^30.4.2"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.107.0",

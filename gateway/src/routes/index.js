@@ -33,7 +33,13 @@ router.use('/brands', adminForWrites, proxyWithPrefix(PRODUCTS_SERVICE, '/brands
 
 // Authenticated
 router.use('/orders', verifyToken, proxyWithPrefix(ORDERS_SERVICE, '/orders'));
-router.use('/payments', proxyWithPrefix(ORDERS_SERVICE, '/payments'));
+
+// Payments: webhook public, rest authenticated
+function paymentsAuth(req, res, next) {
+  if (req.path === '/webhook') return next();
+  verifyToken(req, res, next);
+}
+router.use('/payments', paymentsAuth, proxyWithPrefix(ORDERS_SERVICE, '/payments'));
 
 // Admin only
 router.use('/users', requireAdmin, proxyWithPrefix(USERS_SERVICE, '/users'));
