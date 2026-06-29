@@ -28,25 +28,48 @@ async function enrichOrders(orders) {
 
 const getAll = async (req, res, next) => {
   try {
-    let query = supabase
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const offset = (page - 1) * limit;
+
+    let countQuery = supabase
       .from('orders')
-      .select('*, order_items(*), profiles!inner(name, email)');
+      .select('*', { count: 'exact', head: true });
+
+    let dataQuery = supabase
+      .from('orders')
+      .select('*, order_items(*), profiles!inner(name, email)')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
     const isAdmin = req.user && req.user.role === 'admin';
-    if (!isAdmin) {
-      query = query.eq('user_id', req.user ? req.user.id : 'none');
-    } else if (req.query.user_id) {
-      query = query.eq('user_id', req.query.user_id);
+    const userId = !isAdmin ? (req.user ? req.user.id : 'none') : (req.query.user_id || null);
+
+    if (userId) {
+      countQuery = countQuery.eq('user_id', userId);
+      dataQuery = dataQuery.eq('user_id', userId);
     }
     if (req.query.status) {
-      query = query.eq('status', req.query.status);
+      countQuery = countQuery.eq('status', req.query.status);
+      dataQuery = dataQuery.eq('status', req.query.status);
     }
 
-    const { data: orders, error } = await query;
+    const [{ count }, { data: orders, error }] = await Promise.all([
+      countQuery,
+      dataQuery,
+    ]);
 
     if (error) throw error;
     const enriched = await enrichOrders(orders);
-    successResponse(res, enriched);
+    successResponse(res, {
+      orders: enriched,
+      pagination: {
+        page,
+        limit,
+        total: count || 0,
+        pages: Math.ceil((count || 0) / limit),
+      },
+    });
   } catch (err) {
     next(err);
   }
