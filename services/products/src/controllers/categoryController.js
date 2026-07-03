@@ -17,14 +17,7 @@ const getAll = async (req, res, next) => {
       .select('*')
       .order('name');
 
-    const isAdmin = req.user?.role === 'admin';
-
-    if (!req.query.status) {
-      if (!isAdmin) {
-        query = query.eq('status', 'active');
-      }
-    } else if (req.query.status === 'all' && isAdmin) {
-    } else if (req.query.status) {
+    if (req.query.status) {
       query = query.eq('status', req.query.status);
     }
 
@@ -50,14 +43,7 @@ const getTree = async (req, res, next) => {
       .select('*')
       .order('name');
 
-    const isAdmin = req.user?.role === 'admin';
-
-    if (!req.query.status) {
-      if (!isAdmin) {
-        treeQuery = treeQuery.eq('status', 'active');
-      }
-    } else if (req.query.status === 'all' && isAdmin) {
-    } else if (req.query.status) {
+    if (req.query.status) {
       treeQuery = treeQuery.eq('status', req.query.status);
     }
 
