@@ -148,7 +148,7 @@ const create = async (req, res, next) => {
 
 const update = async (req, res, next) => {
   try {
-    const { name, description, image_url, parent_id } = req.body;
+    const { name, description, image_url, parent_id, status } = req.body;
     const updates = {};
 
     if (name !== undefined) {
@@ -169,6 +169,7 @@ const update = async (req, res, next) => {
 
     if (description !== undefined) updates.description = description;
     if (image_url !== undefined) updates.image_url = image_url;
+    if (status !== undefined) updates.status = status;
 
     if (parent_id !== undefined) {
       if (Number(parent_id) === Number(req.params.id)) {
