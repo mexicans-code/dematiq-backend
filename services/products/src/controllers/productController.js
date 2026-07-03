@@ -3,25 +3,50 @@ const { successResponse, errorResponse } = require('../../../../common/src/utils
 
 const getAll = async (req, res, next) => {
   try {
-    let query = supabase
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+    const offset = (page - 1) * limit;
+
+    let countQuery = supabase
       .from('products')
-      .select('*, categories(name), brands(name, logo_url)');
+      .select('*', { count: 'exact', head: true });
+
+    let dataQuery = supabase
+      .from('products')
+      .select('*, categories(name), brands(name, logo_url)')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (req.query.status) {
-      query = query.eq('status', req.query.status);
+      countQuery = countQuery.eq('status', req.query.status);
+      dataQuery = dataQuery.eq('status', req.query.status);
     }
 
     if (req.query.category_id) {
-      query = query.eq('category_id', req.query.category_id);
+      countQuery = countQuery.eq('category_id', req.query.category_id);
+      dataQuery = dataQuery.eq('category_id', req.query.category_id);
     }
     if (req.query.search) {
-      query = query.or(`name.ilike.%${req.query.search}%,sku.ilike.%${req.query.search}%`);
+      const filter = `name.ilike.%${req.query.search}%,sku.ilike.%${req.query.search}%`;
+      countQuery = countQuery.or(filter);
+      dataQuery = dataQuery.or(filter);
     }
 
-    const { data: products, error } = await query;
+    const [{ count }, { data: products, error }] = await Promise.all([
+      countQuery,
+      dataQuery,
+    ]);
 
     if (error) throw error;
-    successResponse(res, products || []);
+    successResponse(res, {
+      products: products || [],
+      pagination: {
+        page,
+        limit,
+        total: count || 0,
+        pages: Math.ceil((count || 0) / limit),
+      },
+    });
   } catch (err) {
     next(err);
   }
