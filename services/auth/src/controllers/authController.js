@@ -3,13 +3,25 @@ const jwt = require('jsonwebtoken');
 const supabase = require('../../../../common/src/supabase');
 const { jwtSecret, jwtExpiresIn } = require('../config');
 const { successResponse, errorResponse } = require('../../../../common/src/utils/response');
+const logger = require('../../../../common/src/utils/logger');
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const register = async (req, res, next) => {
   try {
     const { name, email, password } = req.body;
 
-    if (!name || !email || !password) {
-      return errorResponse(res, 'Nombre, email y password son requeridos', 400);
+    if (!name || !name.trim()) {
+      return errorResponse(res, 'El nombre es requerido', 400);
+    }
+    if (!email) {
+      return errorResponse(res, 'El email es requerido', 400);
+    }
+    if (!EMAIL_REGEX.test(email)) {
+      return errorResponse(res, 'El formato del email no es válido', 400);
+    }
+    if (!password || password.length < 6) {
+      return errorResponse(res, 'La contraseña debe tener al menos 6 caracteres', 400);
     }
 
     const { data: existing } = await supabase
@@ -26,11 +38,14 @@ const register = async (req, res, next) => {
 
     const { data: profile, error } = await supabase
       .from('profiles')
-      .insert({ name, email, password_hash })
+      .insert({ name: name.trim(), email: email.toLowerCase(), password_hash })
       .select('id, name, email, role')
       .single();
 
-    if (error) throw error;
+    if (error) {
+      logger.error('Error al registrar usuario', { error: error.message });
+      return errorResponse(res, 'Error al registrar el usuario', 500);
+    }
 
     const token = jwt.sign(
       { id: profile.id, email: profile.email, name: profile.name, role: profile.role },
@@ -55,12 +70,18 @@ const login = async (req, res, next) => {
     const { data: profile, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('email', email)
+      .eq('email', email.toLowerCase())
       .maybeSingle();
 
-    if (error) throw error;
+    if (error) {
+      logger.error('Error en login', { error: error.message });
+      throw error;
+    }
     if (!profile) {
       return errorResponse(res, 'Credenciales inválidas', 401);
+    }
+    if (profile.status === 'inactive') {
+      return errorResponse(res, 'Cuenta deshabilitada. Contacta al administrador.', 403);
     }
 
     const isMatch = await bcrypt.compare(password, profile.password_hash);
@@ -89,24 +110,32 @@ const getMe = async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, jwtSecret);
+    let decoded;
+    try {
+      decoded = jwt.verify(token, jwtSecret);
+    } catch (err) {
+      return errorResponse(res, 'Token inválido o expirado', 401);
+    }
 
     const { data: profile, error } = await supabase
       .from('profiles')
-      .select('id, name, email, phone, role, company_name, rfc')
+      .select('id, name, email, phone, role, company_name, rfc, status')
       .eq('id', decoded.id)
       .maybeSingle();
 
-    if (error) throw error;
+    if (error) {
+      logger.error('Error en getMe', { error: error.message });
+      throw error;
+    }
     if (!profile) {
       return errorResponse(res, 'Usuario no encontrado', 404);
+    }
+    if (profile.status === 'inactive') {
+      return errorResponse(res, 'Cuenta deshabilitada. Contacta al administrador.', 403);
     }
 
     successResponse(res, profile);
   } catch (err) {
-    if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
-      return errorResponse(res, 'Token inválido o expirado', 401);
-    }
     next(err);
   }
 };

@@ -1,5 +1,6 @@
 const supabase = require('../../../../common/src/supabase');
 const { successResponse, errorResponse } = require('../../../../common/src/utils/response');
+const logger = require('../../../../common/src/utils/logger');
 
 async function enrichOrders(orders) {
   if (!orders || !orders.length) return orders || [];
@@ -102,20 +103,32 @@ const create = async (req, res, next) => {
   try {
     const { user_id, items, shipping_address_id, notes, shipping_address } = req.body;
 
-    if (!user_id || !items || !items.length) {
-      return errorResponse(res, 'user_id y items son requeridos', 400);
+    if (!user_id) {
+      return errorResponse(res, 'user_id es requerido', 400);
+    }
+    if (!items || !items.length) {
+      return errorResponse(res, 'items es requerido (array con al menos un producto)', 400);
+    }
+
+    for (const item of items) {
+      if (!item.product_id || !item.quantity || item.quantity < 1) {
+        return errorResponse(res, 'Cada item debe tener product_id y quantity > 0', 400);
+      }
     }
 
     const productIds = items.map(i => i.product_id);
     const { data: products, error: prodError } = await supabase
       .from('products')
-      .select('id, price, stock')
+      .select('id, price, stock, status')
       .in('id', productIds);
 
-    if (prodError) throw prodError;
+    if (prodError) {
+      logger.error('Error al consultar productos', { error: prodError.message });
+      throw prodError;
+    }
 
     const productMap = {};
-    for (const p of products) {
+    for (const p of products || []) {
       productMap[p.id] = p;
     }
 
@@ -124,24 +137,33 @@ const create = async (req, res, next) => {
       if (!product) {
         return errorResponse(res, `Producto ID ${item.product_id} no encontrado`, 400);
       }
+      if (product.status === 'inactive') {
+        return errorResponse(res, `Producto ID ${item.product_id} no está disponible`, 400);
+      }
       if (product.stock < item.quantity) {
         return errorResponse(res, `Stock insuficiente para el producto ID ${item.product_id}`, 400);
       }
     }
 
     const IVA = 0.16;
-    const orderItems = items.map(item => ({
-      product_id: item.product_id,
-      quantity: item.quantity,
-      unit_price: productMap[item.product_id].price,
-    }));
+    const orderItems = items.map(item => {
+      const unitPrice = productMap[item.product_id].price;
+      return {
+        product_id: item.product_id,
+        quantity: item.quantity,
+        unit_price: Math.round(unitPrice * (1 + IVA) * 100) / 100,
+      };
+    });
 
-    const subtotal = orderItems.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
-    const total = Math.round(subtotal * (1 + IVA) * 100) / 100;
+    const total = Math.round(orderItems.reduce((sum, item) => sum + item.unit_price * item.quantity, 0) * 100) / 100;
 
     let finalShippingAddressId = shipping_address_id;
 
     if (shipping_address && !finalShippingAddressId) {
+      if (!shipping_address.street || !shipping_address.city || !shipping_address.zip) {
+        return errorResponse(res, 'Dirección de envío requiere street, city y zip', 400);
+      }
+
       const { data: addr, error: addrError } = await supabase
         .from('addresses')
         .insert({
@@ -157,17 +179,23 @@ const create = async (req, res, next) => {
         .select('id')
         .single();
 
-      if (addrError) throw addrError;
+      if (addrError) {
+        logger.error('Error al crear dirección', { error: addrError.message });
+        return errorResponse(res, 'Error al guardar la dirección de envío', 400);
+      }
       finalShippingAddressId = addr.id;
     }
 
-    const { data: order, error } = await supabase
+    const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert({ user_id, total, shipping_address_id: finalShippingAddressId, notes })
       .select('id, user_id, total, status, notes, created_at')
       .single();
 
-    if (error) throw error;
+    if (orderError) {
+      logger.error('Error al crear orden', { error: orderError.message });
+      return errorResponse(res, 'Error al crear la orden', 500);
+    }
 
     const itemsWithOrderId = orderItems.map((item) => ({
       ...item,
@@ -178,7 +206,11 @@ const create = async (req, res, next) => {
       .from('order_items')
       .insert(itemsWithOrderId);
 
-    if (itemsError) throw itemsError;
+    if (itemsError) {
+      logger.error('Error al insertar items de orden', { error: itemsError.message, order_id: order.id });
+      await supabase.from('orders').delete().eq('id', order.id);
+      return errorResponse(res, 'Error al guardar los items de la orden', 500);
+    }
 
     let { data: fullOrder } = await supabase
       .from('orders')

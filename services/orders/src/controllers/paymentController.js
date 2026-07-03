@@ -24,12 +24,13 @@ const decrementStock = async (orderId) => {
       .eq('id', item.product_id)
       .single();
 
-    if (product && product.stock >= item.quantity) {
-      await supabase
-        .from('products')
-        .update({ stock: product.stock - item.quantity })
-        .eq('id', item.product_id);
-    }
+    if (!product) continue;
+
+    const newStock = Math.max(0, product.stock - item.quantity);
+    await supabase
+      .from('products')
+      .update({ stock: newStock, updated_at: new Date().toISOString() })
+      .eq('id', item.product_id);
   }
 };
 
@@ -81,13 +82,12 @@ const createPreference = async (req, res, next) => {
       }
     }
 
-    const IVA = 0.16;
     const items = order.order_items.map((item) => ({
       id: String(item.product_id),
       title: productNames[item.product_id] || `Producto #${item.product_id}`,
       description: `Cantidad: ${item.quantity}`,
       quantity: Number(item.quantity),
-      unit_price: Math.round(Number(item.unit_price) * (1 + IVA) * 100) / 100,
+      unit_price: Number(item.unit_price),
       currency_id: 'MXN',
     }));
 
@@ -214,14 +214,18 @@ const verifyPayment = async (req, res, next) => {
   }
 };
 
-const webhook = async (req, res, next) => {
+const webhook = async (req, res) => {
   try {
     const getPaymentId = async (body) => {
-      if (body.type === 'payment' && body.data?.id) return body.data.id;
-      if (body.topic === 'payment' && body.id) return body.id;
-      if (body.topic === 'merchant_order' && body.id) {
-        const order = await new MerchantOrder(client).get({ merchantOrderId: body.id });
-        return order.payments?.[0]?.id || null;
+      try {
+        if (body.type === 'payment' && body.data?.id) return body.data.id;
+        if (body.topic === 'payment' && body.id) return body.id;
+        if (body.topic === 'merchant_order' && body.id) {
+          const order = await new MerchantOrder(client).get({ merchantOrderId: body.id });
+          return order.payments?.[0]?.id || null;
+        }
+      } catch (err) {
+        console.error('[Webhook] Error al obtener paymentId:', err.message);
       }
       return null;
     };
@@ -238,7 +242,8 @@ const webhook = async (req, res, next) => {
 
     res.sendStatus(200);
   } catch (err) {
-    next(err);
+    console.error('[Webhook] Error:', err.message);
+    res.sendStatus(200);
   }
 };
 
@@ -326,6 +331,17 @@ const processCardPayment = async (req, res, next) => {
 
     if (order.status !== 'pending') {
       return errorResponse(res, 'La orden ya fue procesada', 400);
+    }
+
+    for (const item of order.order_items || []) {
+      const { data: product } = await supabase
+        .from('products')
+        .select('stock')
+        .eq('id', item.product_id)
+        .single();
+      if (product && product.stock < item.quantity) {
+        return errorResponse(res, `Stock insuficiente para el producto ID ${item.product_id}`, 400);
+      }
     }
 
     const paymentData = {

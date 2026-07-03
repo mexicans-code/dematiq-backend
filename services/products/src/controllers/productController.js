@@ -7,11 +7,19 @@ const getAll = async (req, res, next) => {
       .from('products')
       .select('*, categories(name), brands(name, logo_url)');
 
+    const isAdmin = req.user?.role === 'admin';
+
+    if (!req.query.status) {
+      if (!isAdmin) {
+        query = query.eq('status', 'active');
+      }
+    } else if (req.query.status === 'all' && isAdmin) {
+    } else if (req.query.status) {
+      query = query.eq('status', req.query.status);
+    }
+
     if (req.query.category_id) {
       query = query.eq('category_id', req.query.category_id);
-    }
-    if (req.query.status) {
-      query = query.eq('status', req.query.status);
     }
     if (req.query.search) {
       query = query.or(`name.ilike.%${req.query.search}%,sku.ilike.%${req.query.search}%`);
@@ -36,6 +44,11 @@ const getById = async (req, res, next) => {
 
     if (error) throw error;
     if (!product) return errorResponse(res, 'Producto no encontrado', 404);
+
+    const isAdmin = req.user?.role === 'admin';
+    if (!isAdmin && product.status === 'inactive') {
+      return errorResponse(res, 'Producto no disponible', 404);
+    }
 
     successResponse(res, product);
   } catch (err) {

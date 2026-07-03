@@ -3,7 +3,10 @@ try { require('dotenv').config({ path: path.resolve(__dirname, '../../.env') }) 
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
+const logger = require('../../common/src/utils/logger');
+const { noCache } = require('../../common/src/middleware/cacheControl');
 const routes = require('./routes');
 const errorHandler = require('../../common/src/middleware/errorHandler');
 
@@ -16,7 +19,18 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 app.use(helmet());
+
+const limiter = rateLimit({
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_MAX) || 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes, intenta de nuevo más tarde' },
+});
+app.use('/api', limiter);
+
 app.use(morgan('dev'));
+app.use('/api', noCache);
 app.use('/api', routes);
 
 app.get('/health', (req, res) => {
@@ -26,5 +40,5 @@ app.get('/health', (req, res) => {
 app.use(errorHandler);
 
 app.listen(PORT, () => {
-  console.log(`[Gateway] corriendo en puerto ${PORT}`);
+  logger.info(`Gateway corriendo en puerto ${PORT}`);
 });

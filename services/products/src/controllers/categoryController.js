@@ -17,6 +17,17 @@ const getAll = async (req, res, next) => {
       .select('*')
       .order('name');
 
+    const isAdmin = req.user?.role === 'admin';
+
+    if (!req.query.status) {
+      if (!isAdmin) {
+        query = query.eq('status', 'active');
+      }
+    } else if (req.query.status === 'all' && isAdmin) {
+    } else if (req.query.status) {
+      query = query.eq('status', req.query.status);
+    }
+
     if (req.query.parent_id === 'null') {
       query = query.is('parent_id', null);
     } else if (req.query.parent_id) {
@@ -34,10 +45,23 @@ const getAll = async (req, res, next) => {
 
 const getTree = async (req, res, next) => {
   try {
-    const { data: all, error } = await supabase
+    let treeQuery = supabase
       .from('categories')
       .select('*')
       .order('name');
+
+    const isAdmin = req.user?.role === 'admin';
+
+    if (!req.query.status) {
+      if (!isAdmin) {
+        treeQuery = treeQuery.eq('status', 'active');
+      }
+    } else if (req.query.status === 'all' && isAdmin) {
+    } else if (req.query.status) {
+      treeQuery = treeQuery.eq('status', req.query.status);
+    }
+
+    const { data: all, error } = await treeQuery;
 
     if (error) throw error;
 
@@ -187,21 +211,9 @@ const update = async (req, res, next) => {
 
 const _delete = async (req, res, next) => {
   try {
-    const { data: subcategories } = await supabase
-      .from('categories')
-      .select('id')
-      .eq('parent_id', req.params.id);
-
-    if (subcategories && subcategories.length > 0) {
-      await supabase
-        .from('categories')
-        .update({ parent_id: null })
-        .eq('parent_id', req.params.id);
-    }
-
     const { error } = await supabase
       .from('categories')
-      .delete()
+      .update({ status: 'inactive' })
       .eq('id', req.params.id);
 
     if (error) {
@@ -209,7 +221,7 @@ const _delete = async (req, res, next) => {
       throw error;
     }
 
-    successResponse(res, null, 'Categoría eliminada');
+    successResponse(res, null, 'Categoría deshabilitada');
   } catch (err) {
     next(err);
   }

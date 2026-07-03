@@ -16,7 +16,14 @@ const getAll = async (req, res, next) => {
       .select('*')
       .order('name');
 
-    if (req.query.status) {
+    const isAdmin = req.user?.role === 'admin';
+
+    if (!req.query.status) {
+      if (!isAdmin) {
+        query = query.eq('status', 'active');
+      }
+    } else if (req.query.status === 'all' && isAdmin) {
+    } else if (req.query.status) {
       query = query.eq('status', req.query.status);
     }
 
@@ -131,14 +138,9 @@ const update = async (req, res, next) => {
 
 const _delete = async (req, res, next) => {
   try {
-    await supabase
-      .from('products')
-      .update({ brand_id: null })
-      .eq('brand_id', req.params.id);
-
     const { error } = await supabase
       .from('brands')
-      .delete()
+      .update({ status: 'inactive' })
       .eq('id', req.params.id);
 
     if (error) {
@@ -146,7 +148,7 @@ const _delete = async (req, res, next) => {
       throw error;
     }
 
-    successResponse(res, null, 'Marca eliminada');
+    successResponse(res, null, 'Marca deshabilitada');
   } catch (err) {
     next(err);
   }
