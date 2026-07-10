@@ -101,7 +101,7 @@ const getById = async (req, res, next) => {
 
 const create = async (req, res, next) => {
   try {
-    const { user_id, items, shipping_address_id, notes, shipping_address, needs_invoice, invoice_rfc, invoice_business_name, invoice_email, invoice_cfdi_use } = req.body;
+    const { user_id, items, shipping_address_id, notes, shipping_address, needs_invoice, invoice_rfc, invoice_business_name, invoice_email, invoice_cfdi_use, invoice_zip, invoice_regime } = req.body;
 
     if (!user_id) {
       return errorResponse(res, 'user_id es requerido', 400);
@@ -193,6 +193,8 @@ const create = async (req, res, next) => {
       if (invoice_business_name) invoiceData.invoice_business_name = invoice_business_name;
       if (invoice_email) invoiceData.invoice_email = invoice_email;
       if (invoice_cfdi_use) invoiceData.invoice_cfdi_use = invoice_cfdi_use;
+      if (invoice_zip) invoiceData.invoice_zip = invoice_zip;
+      if (invoice_regime) invoiceData.invoice_regime = invoice_regime;
     }
 
     const { data: order, error: orderError } = await supabase
