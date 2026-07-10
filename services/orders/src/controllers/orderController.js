@@ -101,7 +101,7 @@ const getById = async (req, res, next) => {
 
 const create = async (req, res, next) => {
   try {
-    const { user_id, items, shipping_address_id, notes, shipping_address } = req.body;
+    const { user_id, items, shipping_address_id, notes, shipping_address, needs_invoice, invoice_rfc, invoice_business_name, invoice_email, invoice_cfdi_use } = req.body;
 
     if (!user_id) {
       return errorResponse(res, 'user_id es requerido', 400);
@@ -186,9 +186,18 @@ const create = async (req, res, next) => {
       finalShippingAddressId = addr.id;
     }
 
+    const invoiceData = {};
+    if (needs_invoice) {
+      invoiceData.needs_invoice = true;
+      if (invoice_rfc) invoiceData.invoice_rfc = invoice_rfc;
+      if (invoice_business_name) invoiceData.invoice_business_name = invoice_business_name;
+      if (invoice_email) invoiceData.invoice_email = invoice_email;
+      if (invoice_cfdi_use) invoiceData.invoice_cfdi_use = invoice_cfdi_use;
+    }
+
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .insert({ user_id, total, shipping_address_id: finalShippingAddressId, notes })
+      .insert({ user_id, total, shipping_address_id: finalShippingAddressId, notes, ...invoiceData })
       .select('id, user_id, total, status, notes, created_at')
       .single();
 
