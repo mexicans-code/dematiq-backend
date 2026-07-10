@@ -145,15 +145,11 @@ const create = async (req, res, next) => {
       }
     }
 
-    const IVA = 0.16;
-    const orderItems = items.map(item => {
-      const unitPrice = productMap[item.product_id].price;
-      return {
-        product_id: item.product_id,
-        quantity: item.quantity,
-        unit_price: Math.round(unitPrice * (1 + IVA) * 100) / 100,
-      };
-    });
+    const orderItems = items.map(item => ({
+      product_id: item.product_id,
+      quantity: item.quantity,
+      unit_price: productMap[item.product_id].price,
+    }));
 
     const total = Math.round(orderItems.reduce((sum, item) => sum + item.unit_price * item.quantity, 0) * 100) / 100;
 
