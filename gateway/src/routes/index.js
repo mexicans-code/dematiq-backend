@@ -42,8 +42,11 @@ function paymentsAuth(req, res, next) {
 router.use('/payments', paymentsAuth, proxyWithPrefix(ORDERS_SERVICE, '/payments'));
 
 // Settings: GET public, writes admin-only
-router.get('/settings/:key', proxyWithPrefix(PRODUCTS_SERVICE, '/settings'));
-router.put('/settings/:key', requireAdmin, proxyWithPrefix(PRODUCTS_SERVICE, '/settings'));
+function settingsAuth(req, res, next) {
+  if (req.method === 'GET') return next();
+  requireAdmin(req, res, next);
+}
+router.use('/settings', settingsAuth, proxyWithPrefix(PRODUCTS_SERVICE, '/settings'));
 
 // Admin only
 router.use('/users', requireAdmin, proxyWithPrefix(USERS_SERVICE, '/users'));
