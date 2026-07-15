@@ -1,0 +1,1 @@
+ALTER TABLE products ADD COLUMN IF NOT EXISTS price_on_request BOOLEAN DEFAULT false;

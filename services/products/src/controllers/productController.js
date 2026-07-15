@@ -76,10 +76,14 @@ const getById = async (req, res, next) => {
 
 const create = async (req, res, next) => {
   try {
-    const { name, description, sku, category_id, brand_id, price, stock, image_url, specs } = req.body;
+    const { name, description, sku, category_id, brand_id, price, stock, image_url, specs, price_on_request } = req.body;
 
-    if (!name || !sku || !price) {
-      return errorResponse(res, 'Nombre, SKU y precio son requeridos', 400);
+    if (!name || !sku) {
+      return errorResponse(res, 'Nombre y SKU son requeridos', 400);
+    }
+
+    if (!price_on_request && (price === undefined || price === null || price === '')) {
+      return errorResponse(res, 'Precio es requerido si el producto no es "sin precio"', 400);
     }
 
     const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
@@ -88,7 +92,9 @@ const create = async (req, res, next) => {
       .from('products')
       .insert({
         name, slug, description, sku, category_id, brand_id,
-        price, stock: stock || 0, image_url, specs: specs || {}
+        price: price_on_request ? 0 : price,
+        stock: stock || 0, image_url, specs: specs || {},
+        price_on_request: price_on_request || false
       })
       .select('*, categories(name), brands(name, logo_url)')
       .single();
@@ -102,14 +108,15 @@ const create = async (req, res, next) => {
 
 const update = async (req, res, next) => {
   try {
-    const { name, description, sku, category_id, brand_id, price, stock, image_url, specs, status } = req.body;
+    const { name, description, sku, category_id, brand_id, price, stock, image_url, specs, status, price_on_request } = req.body;
     const updates = {};
     if (name) { updates.name = name; updates.slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''); }
     if (description !== undefined) updates.description = description;
     if (sku) updates.sku = sku;
     if (category_id !== undefined) updates.category_id = category_id;
     if (brand_id !== undefined) updates.brand_id = brand_id;
-    if (price) updates.price = price;
+    if (price_on_request !== undefined) updates.price_on_request = price_on_request;
+    if (price !== undefined && price !== null && price !== '') updates.price = price;
     if (stock !== undefined) updates.stock = stock;
     if (image_url !== undefined) updates.image_url = image_url;
     if (specs) updates.specs = specs;
