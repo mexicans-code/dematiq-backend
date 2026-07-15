@@ -9,6 +9,7 @@ const categoryRoutes = require('./routes/categoryRoutes');
 const brandRoutes = require('./routes/brandRoutes');
 const quotationRoutes = require('./routes/quotationRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
+const settingsRoutes = require('./routes/settingsRoutes');
 const errorHandler = require('../../../common/src/middleware/errorHandler');
 
 const app = express();
@@ -29,6 +30,7 @@ app.use('/categories', categoryRoutes);
 app.use('/brands', brandRoutes);
 app.use('/quotations', quotationRoutes);
 app.use('/upload', uploadRoutes);
+app.use('/settings', settingsRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', service: 'products' });
