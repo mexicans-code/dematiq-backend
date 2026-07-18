@@ -28,9 +28,9 @@ const upload = async (req, res, next) => {
     }
 
     const ext = path.extname(req.file.originalname).toLowerCase();
-    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
+    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.pdf'];
     if (!allowed.includes(ext)) {
-      return errorResponse(res, 'Formato de imagen no válido. Permitidos: jpg, jpeg, png, gif, webp, svg', 400);
+      return errorResponse(res, 'Formato no válido. Permitidos: jpg, jpeg, png, gif, webp, svg, pdf', 400);
     }
 
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}${ext}`;
@@ -61,7 +61,7 @@ const upload = async (req, res, next) => {
       .from(BUCKET)
       .getPublicUrl(fileName);
 
-    successResponse(res, { url: publicUrlData.publicUrl }, 'Imagen subida correctamente');
+    successResponse(res, { url: publicUrlData.publicUrl }, 'Archivo subido correctamente');
   } catch (err) {
     next(err);
   }
