@@ -76,7 +76,7 @@ const getById = async (req, res, next) => {
 
 const create = async (req, res, next) => {
   try {
-    const { name, description, sku, category_id, brand_id, price, stock, image_url, specs, price_on_request } = req.body;
+    const { name, description, sku, category_id, brand_id, price, stock, image_url, specs, price_on_request, tech_sheet_url } = req.body;
 
     if (!name || !sku) {
       return errorResponse(res, 'Nombre y SKU son requeridos', 400);
@@ -94,7 +94,8 @@ const create = async (req, res, next) => {
         name, slug, description, sku, category_id, brand_id,
         price: price_on_request ? 0 : price,
         stock: stock || 0, image_url, specs: specs || {},
-        price_on_request: price_on_request || false
+        price_on_request: price_on_request || false,
+        tech_sheet_url: tech_sheet_url || ''
       })
       .select('*, categories(name), brands(name, logo_url)')
       .single();
@@ -108,7 +109,7 @@ const create = async (req, res, next) => {
 
 const update = async (req, res, next) => {
   try {
-    const { name, description, sku, category_id, brand_id, price, stock, image_url, specs, status, price_on_request } = req.body;
+    const { name, description, sku, category_id, brand_id, price, stock, image_url, specs, status, price_on_request, tech_sheet_url } = req.body;
     const updates = {};
     if (name) { updates.name = name; updates.slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''); }
     if (description !== undefined) updates.description = description;
@@ -121,6 +122,7 @@ const update = async (req, res, next) => {
     if (image_url !== undefined) updates.image_url = image_url;
     if (specs) updates.specs = specs;
     if (status) updates.status = status;
+    if (tech_sheet_url !== undefined) updates.tech_sheet_url = tech_sheet_url;
     updates.updated_at = new Date().toISOString();
 
     const { data: product, error } = await supabase

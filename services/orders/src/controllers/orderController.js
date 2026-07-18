@@ -101,7 +101,7 @@ const getById = async (req, res, next) => {
 
 const create = async (req, res, next) => {
   try {
-    const { user_id, items, shipping_address_id, notes, shipping_address, needs_invoice, invoice_rfc, invoice_business_name, invoice_email, invoice_cfdi_use, invoice_zip, invoice_regime } = req.body;
+    const { user_id, items, shipping_address_id, notes, shipping_address, needs_invoice, invoice_rfc, invoice_business_name, invoice_email, invoice_cfdi_use, invoice_zip, invoice_regime, invoice_fiscal_address } = req.body;
 
     if (!user_id) {
       return errorResponse(res, 'user_id es requerido', 400);
@@ -191,6 +191,7 @@ const create = async (req, res, next) => {
       if (invoice_cfdi_use) invoiceData.invoice_cfdi_use = invoice_cfdi_use;
       if (invoice_zip) invoiceData.invoice_zip = invoice_zip;
       if (invoice_regime) invoiceData.invoice_regime = invoice_regime;
+      if (invoice_fiscal_address) invoiceData.invoice_fiscal_address = invoice_fiscal_address;
     }
 
     const { data: order, error: orderError } = await supabase
@@ -263,4 +264,32 @@ const updateStatus = async (req, res, next) => {
   }
 };
 
-module.exports = { getAll, getById, create, updateStatus };
+const update = async (req, res, next) => {
+  try {
+    const { tracking_number, courier, shipped_at } = req.body;
+    const updateData = { updated_at: new Date().toISOString() };
+    if (tracking_number !== undefined) updateData.tracking_number = tracking_number;
+    if (courier !== undefined) updateData.courier = courier;
+    if (shipped_at !== undefined) updateData.shipped_at = shipped_at;
+
+    let { data: order, error } = await supabase
+      .from('orders')
+      .update(updateData)
+      .eq('id', req.params.id)
+      .select('*, order_items(*), profiles!inner(name, email)')
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') return errorResponse(res, 'Orden no encontrada', 404);
+      throw error;
+    }
+
+    const enriched = await enrichOrders([order]);
+    order = enriched[0];
+    successResponse(res, order, 'Orden actualizada');
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { getAll, getById, create, updateStatus, update };
