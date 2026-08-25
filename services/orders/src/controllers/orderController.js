@@ -101,11 +101,9 @@ const getById = async (req, res, next) => {
 
 const create = async (req, res, next) => {
   try {
-    const { user_id, items, shipping_address_id, notes, shipping_address, needs_invoice, invoice_rfc, invoice_business_name, invoice_email, invoice_cfdi_use, invoice_zip, invoice_regime, invoice_fiscal_address } = req.body;
+    const user_id = req.user.id;
+    const { items, shipping_address_id, notes, shipping_address, needs_invoice, invoice_rfc, invoice_business_name, invoice_email, invoice_cfdi_use, invoice_zip, invoice_regime, invoice_fiscal_address } = req.body;
 
-    if (!user_id) {
-      return errorResponse(res, 'user_id es requerido', 400);
-    }
     if (!items || !items.length) {
       return errorResponse(res, 'items es requerido (array con al menos un producto)', 400);
     }
@@ -163,7 +161,7 @@ const create = async (req, res, next) => {
       const { data: addr, error: addrError } = await supabase
         .from('addresses')
         .insert({
-          user_id,
+          user_id: req.user.id,
           company_name: shipping_address.company || null,
           contact_name: shipping_address.contact || null,
           street: shipping_address.street,
@@ -196,7 +194,7 @@ const create = async (req, res, next) => {
 
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .insert({ user_id, total, shipping_address_id: finalShippingAddressId, notes, ...invoiceData })
+      .insert({ user_id: req.user.id, total, shipping_address_id: finalShippingAddressId, notes, ...invoiceData })
       .select('id, user_id, total, status, notes, created_at')
       .single();
 

@@ -5,7 +5,7 @@ jest.mock('bcryptjs');
 jest.mock('jsonwebtoken');
 
 const mockSupabaseFrom = jest.fn();
-jest.mock('../../../../../common/src/supabase', () => ({
+jest.mock('../../../../common/src/supabase', () => ({
   from: (...args) => mockSupabaseFrom(...args),
 }));
 
@@ -45,7 +45,7 @@ describe('register', () => {
   it('debe registrar un usuario y retornar token (happy path)', async () => {
     req.body = { ...validBody };
 
-    const profile = { id: 'user-1', name: 'Test User', email: 'test@test.com', role: 'user' };
+    const profile = { id: 'user-1', name: 'Test User', email: 'test@test.com', role: 'user', token_version: 0 };
     const existingQuery = createMockQuery({ data: null, error: null });
     const insertQuery = createMockQuery({ data: profile, error: null });
 
@@ -60,7 +60,7 @@ describe('register', () => {
 
     expect(bcrypt.hash).toHaveBeenCalledWith('password123', 10);
     expect(jwt.sign).toHaveBeenCalledWith(
-      { id: 'user-1', email: 'test@test.com', name: 'Test User', role: 'user' },
+      { id: 'user-1', email: 'test@test.com', name: 'Test User', role: 'user', token_version: 0 },
       'test-secret',
       { expiresIn: '7d' }
     );
@@ -87,7 +87,7 @@ describe('register', () => {
       await register(req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Nombre, email y password son requeridos' });
+      expect(res.json).toHaveBeenCalledWith({ error: 'El nombre es requerido' });
     }
   });
 
@@ -147,6 +147,7 @@ describe('login', () => {
     phone: null,
     company_name: null,
     rfc: null,
+    token_version: 0,
   };
 
   beforeEach(() => {
@@ -168,7 +169,11 @@ describe('login', () => {
     await login(req, res, next);
 
     expect(bcrypt.compare).toHaveBeenCalledWith('password123', 'hashed-password');
-    expect(jwt.sign).toHaveBeenCalled();
+    expect(jwt.sign).toHaveBeenCalledWith(
+      { id: 'user-1', email: 'test@test.com', name: 'Test User', role: 'user', token_version: 0 },
+      'test-secret',
+      { expiresIn: '7d' }
+    );
     expect(res.status).toHaveBeenCalledWith(200);
     const { password_hash, ...userWithoutHash } = profile;
     expect(res.json).toHaveBeenCalledWith({
@@ -340,10 +345,10 @@ describe('changePassword', () => {
     jest.clearAllMocks();
   });
 
-  it('debe cambiar la contraseña exitosamente', async () => {
+  it('debe cambiar la contraseña exitosamente e incrementar token_version', async () => {
     req.body = { ...validBody };
 
-    const profileQuery = createMockQuery({ data: { password_hash: 'old-hash' }, error: null });
+    const profileQuery = createMockQuery({ data: { password_hash: 'old-hash', token_version: 0 }, error: null });
     mockSupabaseFrom.mockReturnValueOnce(profileQuery);
 
     bcrypt.compare.mockResolvedValue(true);
@@ -358,7 +363,7 @@ describe('changePassword', () => {
     expect(bcrypt.hash).toHaveBeenCalledWith('newPass456', 10);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({
-      message: 'Contraseña actualizada exitosamente',
+      message: 'Contraseña actualizada exitosamente. Inicia sesión nuevamente.',
       data: null,
     });
   });
@@ -433,7 +438,7 @@ describe('changePassword', () => {
     req.body = { ...validBody };
     const dbError = new Error('DB error');
 
-    const profileQuery = createMockQuery({ data: { password_hash: 'old-hash' }, error: null });
+    const profileQuery = createMockQuery({ data: { password_hash: 'old-hash', token_version: 0 }, error: null });
     mockSupabaseFrom.mockReturnValueOnce(profileQuery);
 
     bcrypt.compare.mockResolvedValue(true);

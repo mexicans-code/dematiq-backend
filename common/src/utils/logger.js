@@ -31,4 +31,38 @@ const logger = {
   },
 };
 
+const audit = {
+  log(event, details) {
+    if (!shouldLog('info')) return;
+    const timestamp = new Date().toISOString();
+    const entry = {
+      timestamp,
+      event,
+      ...details,
+    };
+    console.log(`[AUDIT] ${JSON.stringify(entry)}`);
+  },
+
+  auth(event, userId, ip, success, meta = {}) {
+    this.log(`AUTH_${event.toUpperCase()}`, { userId, ip, success, ...meta });
+  },
+
+  admin(event, userId, ip, meta = {}) {
+    this.log(`ADMIN_${event.toUpperCase()}`, { userId, ip, ...meta });
+  },
+
+  dataAccess(event, userId, resource, meta = {}) {
+    this.log(`DATA_${event.toUpperCase()}`, { userId, resource, ...meta });
+  },
+
+  security(event, severity, details) {
+    this.log(`SECURITY_${event.toUpperCase()}`, { severity, ...details });
+  },
+
+  upload(event, userId, fileName, meta = {}) {
+    this.log(`UPLOAD_${event.toUpperCase()}`, { userId, fileName, ...meta });
+  },
+};
+
 module.exports = logger;
+module.exports.audit = audit;

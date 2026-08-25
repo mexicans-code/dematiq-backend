@@ -4,6 +4,7 @@ const supabase = require('../../../../common/src/supabase');
 const { jwtSecret, jwtExpiresIn } = require('../config');
 const { successResponse, errorResponse } = require('../../../../common/src/utils/response');
 const logger = require('../../../../common/src/utils/logger');
+const { audit } = require('../../../../common/src/utils/logger');
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -38,8 +39,8 @@ const register = async (req, res, next) => {
 
     const { data: profile, error } = await supabase
       .from('profiles')
-      .insert({ name: name.trim(), email: email.toLowerCase(), password_hash })
-      .select('id, name, email, role')
+      .insert({ name: name.trim(), email: email.toLowerCase(), password_hash, token_version: 0 })
+      .select('id, name, email, role, token_version')
       .single();
 
     if (error) {
@@ -48,13 +49,15 @@ const register = async (req, res, next) => {
     }
 
     const token = jwt.sign(
-      { id: profile.id, email: profile.email, name: profile.name, role: profile.role },
+      { id: profile.id, email: profile.email, name: profile.name, role: profile.role, token_version: profile.token_version },
       jwtSecret,
       { expiresIn: jwtExpiresIn }
     );
 
+    audit.auth('register', profile.id, req.ip, true, { email: profile.email });
     successResponse(res, { token, user: profile }, 'Usuario registrado', 201);
   } catch (err) {
+    audit.auth('register', null, req.ip, false, { email: req.body.email, error: err.message });
     next(err);
   }
 };
@@ -90,14 +93,16 @@ const login = async (req, res, next) => {
     }
 
     const token = jwt.sign(
-      { id: profile.id, email: profile.email, name: profile.name, role: profile.role },
+      { id: profile.id, email: profile.email, name: profile.name, role: profile.role, token_version: profile.token_version || 0 },
       jwtSecret,
       { expiresIn: jwtExpiresIn }
     );
 
     const { password_hash, ...user } = profile;
+    audit.auth('login', profile.id, req.ip, true, { email: profile.email, role: profile.role });
     successResponse(res, { token, user }, 'Login exitoso');
   } catch (err) {
+    audit.auth('login', null, req.ip, false, { email: req.body.email, error: err.message });
     next(err);
   }
 };
@@ -153,7 +158,7 @@ const changePassword = async (req, res, next) => {
 
     const { data: profile, error } = await supabase
       .from('profiles')
-      .select('password_hash')
+      .select('password_hash, token_version')
       .eq('id', req.user.id)
       .maybeSingle();
 
@@ -166,15 +171,18 @@ const changePassword = async (req, res, next) => {
     }
 
     const password_hash = await bcrypt.hash(newPass, 10);
+    const newTokenVersion = (profile.token_version || 0) + 1;
     const { error: updateError } = await supabase
       .from('profiles')
-      .update({ password_hash, updated_at: new Date().toISOString() })
+      .update({ password_hash, token_version: newTokenVersion, updated_at: new Date().toISOString() })
       .eq('id', req.user.id);
 
     if (updateError) throw updateError;
 
-    successResponse(res, null, 'Contraseña actualizada exitosamente');
+    audit.auth('password_change', req.user.id, req.ip, true, { email: req.user.email });
+    successResponse(res, null, 'Contraseña actualizada exitosamente. Inicia sesión nuevamente.');
   } catch (err) {
+    audit.auth('password_change', req.user.id, req.ip, false, { email: req.user.email, error: err.message });
     next(err);
   }
 };

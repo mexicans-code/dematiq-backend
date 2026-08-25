@@ -3,18 +3,19 @@ const supabase = require('../../../../common/src/supabase');
 const { successResponse, errorResponse } = require('../../../../common/src/utils/response');
 
 const BUCKET = 'imagenes-productos';
+const SIGNED_URL_EXPIRY = 60 * 60 * 24 * 365; // 1 año
 
 async function ensureBucket() {
   const { data: buckets } = await supabase.storage.listBuckets();
   const exists = buckets?.some((b) => b.name === BUCKET);
   if (!exists) {
     const { error } = await supabase.storage.createBucket(BUCKET, {
-      public: true,
+      public: false,
     });
     if (error) {
       console.error(`[Upload] Error al crear bucket "${BUCKET}": ${error.message}`);
     } else {
-      console.log(`[Upload] Bucket "${BUCKET}" creado correctamente`);
+      console.log(`[Upload] Bucket privado "${BUCKET}" creado correctamente`);
     }
   }
 }
@@ -57,11 +58,13 @@ const upload = async (req, res, next) => {
       }
     }
 
-    const { data: publicUrlData } = supabase.storage
+    const { data: signedUrlData, error: signedError } = await supabase.storage
       .from(BUCKET)
-      .getPublicUrl(fileName);
+      .createSignedUrl(fileName, SIGNED_URL_EXPIRY);
 
-    successResponse(res, { url: publicUrlData.publicUrl }, 'Archivo subido correctamente');
+    if (signedError) throw signedError;
+
+    successResponse(res, { url: signedUrlData.signedUrl, expiresAt: new Date(Date.now() + SIGNED_URL_EXPIRY * 1000).toISOString() }, 'Archivo subido correctamente');
   } catch (err) {
     next(err);
   }
